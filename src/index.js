@@ -7,30 +7,17 @@ const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
 
-// ── Middlewares básicos ───────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 
-// ── Conexão MongoDB (cache para ambiente serverless) ──────────────────────────
+// ── Conexão MongoDB (cache para serverless) ───────────────────────────────────
 let isConnected = false;
 
 async function connectDB() {
   if (isConnected) return;
-  const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI não definida');
-  await mongoose.connect(uri);
+  await mongoose.connect(process.env.MONGODB_URI);
   isConnected = true;
 }
-
-// Garante conexão antes de qualquer rota
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha na conexão com banco', detalhe: err.message });
-  }
-});
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
 const swaggerOptions = {
@@ -51,25 +38,28 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// ── Middleware de conexão (antes das rotas) ───────────────────────────────────
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha na conexão com o banco', detalhe: err.message });
+  }
+});
+
 // ── Rotas ─────────────────────────────────────────────────────────────────────
 app.use('/api/cursos',    require('./routes/cursos'));
 app.use('/api/materiais', require('./routes/materiais'));
 
 app.get('/', (req, res) => res.redirect('/docs'));
 
-// ── Local: sobe servidor normal. Vercel: exporta o app ───────────────────────
+// ── Local vs Vercel ───────────────────────────────────────────────────────────
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   connectDB()
-    .then(() =>
-      app.listen(PORT, () =>
-        console.log(`🚀  http://localhost:${PORT}\n📄  Docs: http://localhost:${PORT}/docs`)
-      )
-    )
-    .catch((err) => {
-      console.error('❌', err.message);
-      process.exit(1);
-    });
+    .then(() => app.listen(PORT, () => console.log(`🚀 http://localhost:${PORT}/docs`)))
+    .catch(console.error);
 }
 
 module.exports = app;
