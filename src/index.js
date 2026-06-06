@@ -2,8 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const swaggerUi = require('swagger-ui-express');
-const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
 
@@ -19,26 +17,6 @@ async function connectDB() {
   isConnected = true;
 }
 
-// ── Swagger ───────────────────────────────────────────────────────────────────
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'SaaS de Cursos — API',
-      version: '1.0.0',
-      description:
-        'API CRUD para plataforma SaaS de cursos.\n\n' +
-        '**Disciplina:** Desenvolvimento de APIs  \n**Professor:** Pedro Borges  \n**Curso:** Sistemas de Informação',
-    },
-    servers: [{ url: process.env.BASE_URL || 'http://localhost:3000' }],
-  },
-  apis: ['./src/routes/*.js'],
-};
-
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// ── Middleware de conexão (antes das rotas) ───────────────────────────────────
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -46,6 +24,59 @@ app.use(async (req, res, next) => {
   } catch (err) {
     res.status(500).json({ erro: 'Falha na conexão com o banco', detalhe: err.message });
   }
+});
+
+// ── Swagger via CDN (sem depender do swagger-ui-express) ──────────────────────
+const swaggerJsdoc = require('swagger-jsdoc');
+
+const swaggerSpec = swaggerJsdoc({
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'SaaS de Cursos — API',
+      version: '1.0.0',
+      description:
+        'API CRUD para plataforma SaaS de cursos.\n\n' +
+        '**Disciplina:** Desenvolvimento de APIs | **Professor:** Pedro Borges | **Curso:** Sistemas de Informação',
+    },
+    servers: [{ url: process.env.BASE_URL || 'http://localhost:3000' }],
+  },
+  apis: ['./src/routes/*.js'],
+});
+
+// Entrega o JSON da spec
+app.get('/docs/swagger.json', (req, res) => {
+  res.json(swaggerSpec);
+});
+
+// Entrega o HTML do Swagger via CDN
+app.get('/docs', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SaaS de Cursos — API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"/>
+  <style>
+    body { margin: 0; background: #fafafa; }
+    .topbar { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/docs/swagger.json',
+      dom_id: '#swagger-ui',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+      layout: 'BaseLayout',
+      deepLinking: true,
+    });
+  </script>
+</body>
+</html>`);
 });
 
 // ── Rotas ─────────────────────────────────────────────────────────────────────
